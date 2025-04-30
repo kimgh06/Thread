@@ -1,0 +1,14 @@
+html {
+  height: 100svh;
+}
+
+body {
+  width: 100svw;
+  height: auto;
+  margin: 0;
+  padding: 0;
+}
+
+main {
+  display: flex;
+}
