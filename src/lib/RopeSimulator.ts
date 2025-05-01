@@ -55,11 +55,31 @@ class Constraint {
   satisfy() {
     const delta = sub(this.p2.position, this.p1.position);
     const dist = length(delta);
-    const diff = (dist - this.restLength) / dist;
-    const correction = mul(delta, 0.5 * diff);
+    if (dist === 0) return; // divide-by-zero 방지
 
-    if (!this.p1.locked) this.p1.position = add(this.p1.position, correction);
-    if (!this.p2.locked) this.p2.position = sub(this.p2.position, correction);
+    const diff = (dist - this.restLength) / dist;
+    const stiffness = 0.5; // 0~1 (낮을수록 덜 correction)
+    const correction = mul(delta, diff * stiffness);
+
+    if (!this.p1.locked && !this.p2.locked) {
+      this.p1.position = add(this.p1.position, mul(correction, 0.5));
+      this.p2.position = sub(this.p2.position, mul(correction, 0.5));
+    } else if (this.p1.locked && !this.p2.locked) {
+      this.p2.position = sub(this.p2.position, correction);
+    } else if (!this.p1.locked && this.p2.locked) {
+      this.p1.position = add(this.p1.position, correction);
+    }
+
+    // Apply damping to reduce energy over time.
+    const damping = 0.9;
+    if (!this.p1.locked) {
+      const velocity1 = sub(this.p1.prevPosition, this.p1.position);
+      this.p1.prevPosition = add(this.p1.position, mul(velocity1, damping));
+    }
+    if (!this.p2.locked) {
+      const velocity2 = sub(this.p2.prevPosition, this.p2.position);
+      this.p2.prevPosition = add(this.p2.position, mul(velocity2, damping));
+    }
   }
 }
 
@@ -67,13 +87,13 @@ class Constraint {
 export class RopeSimulator {
   particles: Particle[] = [];
   constraints: Constraint[] = [];
-  // gravity: Vec3 = { x: 0, y: -0.02, z: 0 };
-  gravity: Vec3 = { x: 0, y: 0, z: 0 };
+  // gravity: Vec3 = { x: 0, y: -0.01, z: 0 }; // Gravity Exists
+  gravity: Vec3 = { x: 0, y: 0, z: 0 }; // No Gravity
   lineMesh: BABYLON.LinesMesh;
   public balls: BABYLON.Mesh[] = [];
 
   private initializeBalls(scene: BABYLON.Scene) {
-    for (let i = 0; i < this.particles.length; i++) {
+    for (let i = 0; i < this.particles.length - 1; i++) {
       const sphere = BABYLON.MeshBuilder.CreateSphere(
         "ball" + i,
         { diameter: 0.05 },
@@ -89,6 +109,21 @@ export class RopeSimulator {
       sphere.material = redMaterial;
       this.balls.push(sphere);
     }
+    // last one is red
+    const lastSphere = BABYLON.MeshBuilder.CreateSphere(
+      "ball" + (this.particles.length - 1),
+      { diameter: 0.05 },
+      scene
+    );
+    lastSphere.position = new BABYLON.Vector3(
+      this.particles[this.particles.length - 1].position.x,
+      this.particles[this.particles.length - 1].position.y,
+      this.particles[this.particles.length - 1].position.z
+    );
+    const redMaterial = new BABYLON.StandardMaterial("redMaterial", scene);
+    redMaterial.diffuseColor = new BABYLON.Color3(1, 0, 0);
+    lastSphere.material = redMaterial;
+    this.balls.push(lastSphere);
   }
 
   private updateBalls() {
