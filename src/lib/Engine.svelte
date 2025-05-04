@@ -12,6 +12,7 @@
   let scene: Scene;
   let rope: RopeSimulator;
   let box: Mesh;
+  const pressedKeys = new Set<string>();
 
   const startIndex = 0; 
   const endIndex = 499;
@@ -74,12 +75,10 @@
     const count = endIndex + 1;
     
     rope = new RopeSimulator(scene, { x: 0, y: 5, z: 0 }, 10 / count, count);
-    flyCam = new ArcRotateCamera(
-      "camera", Math.PI / 2, Math.PI / 4, 12, Vector3.Zero(), scene
-    );
+    flyCam = new ArcRotateCamera("camera", Math.PI / 2, Math.PI / 4, 12, Vector3.Zero(), scene);
     flyCam.setTarget(new Vector3(rope.particles[endIndex].position.x, rope.particles[endIndex].position.y, rope.particles[endIndex].position.z));
     flyCam.attachControl(canvas, true);
-    flyCam.radius = 5;
+    flyCam.radius = 5; // set zoom level
 
     // right bottom of screen
     outCam = new ArcRotateCamera(
@@ -100,49 +99,55 @@
 
     // add keyboard controls
     window.addEventListener('keydown', (event) => {
-      switch (event.key) {
-        case 'w':
-          move("forward");
-          break;
-        case 's':
-          move("backward");
-          break;
-        case 'a':
-          move("left");
-          break;
-        case 'd':
-          move("right");
-          break;
-        case ' ':
-          move("up");
-          break;
-        case 'Shift':
-          move("down");
-          break;
-        case 'u':
-          zoom("in");
-          break;
-        case 'o':
-          zoom("out");
-          break;
-          case 'i':
-          rotateCam("up");
-          break;
-        case 'k':
-          rotateCam("down");
-          break;
-        case 'j':
-          rotateCam("left");
-          break;
-        case 'l':
-          rotateCam("right");
-          break;
-        case 'r':
-          endRelease();
-          break;
-        default:
-          break;
+      if (!pressedKeys.has(event.key)) {
+        pressedKeys.add(event.key);
       }
+      // Handle key presses for movement and camera rotation
+      for(const key of pressedKeys) {
+        switch (key) {
+          case 'w':
+            move("forward");
+            break;
+          case 's':
+            move("backward");
+            break;
+          case 'a':
+            move("left");
+            break;
+          case 'd':
+            move("right");
+            break;
+          case ' ':
+            move("up");
+            break;
+          case 'Shift':
+            move("down");
+            break;
+          case 'u':
+            zoom("in");
+            break;
+          case 'o':
+            zoom("out");
+            break;
+          case 'i':
+            rotateCam("up");
+            break;
+          case 'k':
+            rotateCam("down");
+            break;
+          case 'j':
+            rotateCam("left");
+            break;
+          case 'l':
+            rotateCam("right");
+            break;
+          default:
+            break;
+        }
+      }
+    });
+    window.addEventListener('keyup', (event) => {
+      pressedKeys.delete(event.key); // Remove key from pressed keys
     });
     window.addEventListener('blur', () => {
       // Pause the simulation when the window loses focus
