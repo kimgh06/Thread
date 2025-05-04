@@ -3,8 +3,8 @@
   import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, MeshBuilder, Mesh, Viewport} from '@babylonjs/core';
   import { RopeSimulator } from './RopeSimulator';
 
-  const moveSpeed = 0.1; // 이동 속도
-  const zoomSpeed = 1.5;
+  const moveSpeed = 0.09; // 이동 속도
+  const zoomSpeed = 1.3;
   let canvas: HTMLCanvasElement;
   let flyCam: ArcRotateCamera;
   let outCam: ArcRotateCamera;
@@ -25,10 +25,10 @@
 
   function rotateCam(arg: "left" | "right" | "up" | "down") {
     if (!rope) return;
-    if (arg === "left") flyCam.alpha += 0.1;
-    if (arg === "right") flyCam.alpha -= 0.1;
-    if (arg === "up") flyCam.beta += 0.1;
-    if (arg === "down") flyCam.beta -= 0.1;
+    if (arg === "left") flyCam.alpha += moveSpeed;
+    if (arg === "right") flyCam.alpha -= moveSpeed;
+    if (arg === "up") flyCam.beta += moveSpeed;
+    if (arg === "down") flyCam.beta -= moveSpeed;
   }
 
   // up - down - left - right
@@ -62,6 +62,56 @@
     // Move the camera while preserving the original offset
     flyCam.setPosition(new Vector3(p.position.x, p.position.y, p.position.z).add(offset));
     flyCam.setTarget(new Vector3(p.position.x, p.position.y, p.position.z));
+  }
+
+  const controlFunction = () =>{
+    if (!rope) return;
+    // Handle key presses for movement and camera rotation
+    for (const key of pressedKeys) {
+      switch (key) {
+        case 'w':
+          move("forward");
+          break;
+        case 's':
+          move("backward");
+          break;
+        case 'a':
+          move("left");
+          break;
+        case 'd':
+          move("right");
+          break;
+        case ' ':
+          move("up");
+          break;
+        case 'Shift':
+          move("down");
+          break;
+        case 'u':
+          zoom("in");
+          break;
+        case 'o':
+          zoom("out");
+          break;
+        case 'i':
+          rotateCam("up");
+          break;
+        case 'k':
+          rotateCam("down");
+          break;
+        case 'j':
+          rotateCam("left");
+          break;
+        case 'l':
+          rotateCam("right");
+          break;
+        case 'r':
+          endRelease();
+          break;
+        default:
+          break;
+      }
+    }
   }
 
   const endRelease = () => rope.particles[endIndex].locked = !rope.particles[endIndex].locked;
@@ -99,52 +149,7 @@
 
     // add keyboard controls
     window.addEventListener('keydown', (event) => {
-      if (!pressedKeys.has(event.key)) {
-        pressedKeys.add(event.key);
-      }
-      // Handle key presses for movement and camera rotation
-      for(const key of pressedKeys) {
-        switch (key) {
-          case 'w':
-            move("forward");
-            break;
-          case 's':
-            move("backward");
-            break;
-          case 'a':
-            move("left");
-            break;
-          case 'd':
-            move("right");
-            break;
-          case ' ':
-            move("up");
-            break;
-          case 'Shift':
-            move("down");
-            break;
-          case 'u':
-            zoom("in");
-            break;
-          case 'o':
-            zoom("out");
-            break;
-          case 'i':
-            rotateCam("up");
-            break;
-          case 'k':
-            rotateCam("down");
-            break;
-          case 'j':
-            rotateCam("left");
-            break;
-          case 'l':
-            rotateCam("right");
-            break;
-          default:
-            break;
-        }
-      }
+      if (!pressedKeys.has(event.key)) pressedKeys.add(event.key);
     });
     window.addEventListener('keyup', (event) => {
       pressedKeys.delete(event.key); // Remove key from pressed keys
@@ -157,6 +162,7 @@
       // Resume the simulation when the window regains focus
       engine.runRenderLoop(() => {
         scene.render();
+        controlFunction();
       });
     });
 
@@ -269,9 +275,9 @@
     <button on:click={() => rotateCam("right")}>Rotate Right (L)</button>
     <button on:click={endRelease}>
       {#if rope?.particles[endIndex]?.locked}
-        Position Lock (R)
+        Position Locked (R)
       {:else}
-        Position Unlock (R)
+        Position Unlocked (R)
       {/if}
     </button>
   </div>
