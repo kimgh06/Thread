@@ -71,7 +71,7 @@ class Constraint {
     }
 
     // Apply damping to reduce energy over time.
-    const damping = 0.9;
+    const damping = 0.99; // 0 ~ 1
     if (!this.p1.locked) {
       const velocity1 = sub(this.p1.prevPosition, this.p1.position);
       this.p1.prevPosition = add(this.p1.position, mul(velocity1, damping));
@@ -176,7 +176,38 @@ export class RopeSimulator {
     // Verlet integration
     for (const p of this.particles) p.applyVerlet(this.gravity);
 
-    // 제약 반복 적용
+    // self-collision
+    for (let sc = 0; sc < 3; sc++) {
+      for (let i = 0; i < this.particles.length; i++) {
+        for (let j = i + 2; j < this.particles.length; j++) {
+          // 인접 제외
+          const delta = sub(
+            this.particles[j].position,
+            this.particles[i].position
+          );
+          const dist = length(delta);
+          const minDist = 0.05; // 원하는 최소 거리
+
+          if (dist < minDist && dist > 0) {
+            const diff = (minDist - dist) / dist;
+            const correction = mul(delta, diff * 0.5);
+
+            if (!this.particles[i].locked)
+              this.particles[i].position = sub(
+                this.particles[i].position,
+                correction
+              );
+            if (!this.particles[j].locked)
+              this.particles[j].position = add(
+                this.particles[j].position,
+                correction
+              );
+          }
+        }
+      }
+    }
+
+    // Constants for constraint satisfactions
     for (let i = 0; i < 5; i++) {
       for (const c of this.constraints) c.satisfy();
     }
