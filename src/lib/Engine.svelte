@@ -6,7 +6,6 @@
   const moveSpeed = 0.1; // 이동 속도
   const zoomSpeed = 1.5;
   let canvas: HTMLCanvasElement;
-  let secondCanvas: HTMLCanvasElement;
   let flyCam: ArcRotateCamera;
   let outCam: ArcRotateCamera;
   let engine: Engine;
@@ -14,8 +13,8 @@
   let rope: RopeSimulator;
   let box: Mesh;
 
-  const startIndex = 0; // 첫 번째 파티클 (로프 시작)
-  const endIndex = 499; // 마지막 파티클 (로프 끝)
+  const startIndex = 0; 
+  const endIndex = 499;
 
   function zoom(arg: "in" | "out") {
     if (!rope) return;
@@ -23,44 +22,34 @@
     if (arg === "out") flyCam.radius *= zoomSpeed;
   }
 
+  function rotateCam(arg: "left" | "right" | "up" | "down") {
+    if (!rope) return;
+    if (arg === "left") flyCam.alpha += 0.1;
+    if (arg === "right") flyCam.alpha -= 0.1;
+    if (arg === "up") flyCam.beta += 0.1;
+    if (arg === "down") flyCam.beta -= 0.1;
+  }
+
   // up - down - left - right
   function move(direction: string) {
     if (!rope) return;
     const p = rope.particles[endIndex];
     const cameraMatrix = flyCam.getViewMatrix().invert();
+    const  [row1, row2, row3] = [cameraMatrix.getRow(0), cameraMatrix.getRow(1), cameraMatrix.getRow(2)]
 
-    const cameraDirection = new Vector3(
-      cameraMatrix.getRow(2)!.x,
-      cameraMatrix.getRow(2)!.y,
-      cameraMatrix.getRow(2)!.z
-    ).scale(-1); // 카메라 앞 방향
-    const cameraRight = new Vector3(
-      cameraMatrix.getRow(0)!.x,
-      cameraMatrix.getRow(0)!.y,
-      cameraMatrix.getRow(0)!.z
-    );               // 카메라 오른쪽
-    const cameraUp = new Vector3(
-      cameraMatrix.getRow(1)!.x,
-      cameraMatrix.getRow(1)!.y,
-      cameraMatrix.getRow(1)!.z
-    );               // 카메라 위쪽
+    const cameraDirection = new Vector3(row3!.x, row3!.y, row3!.z).scale(-1); // 카메라 앞 방향
+    const cameraRight = new Vector3(row1!.x, row1!.y, row1!.z);               // 카메라 오른쪽
+    const cameraUp = new Vector3(row2!.x, row2!.y, row2!.z);               // 카메라 위쪽
 
     let moveVec = new Vector3(0, 0, 0);
 
-    if (direction === 'left') {
-      moveVec = cameraRight.scale(-moveSpeed);
-    } else if (direction === 'right') {
-      moveVec = cameraRight.scale(moveSpeed);
-    } else if (direction === 'up') {
-      moveVec = cameraUp.scale(moveSpeed);
-    } else if (direction === 'down') {
-      moveVec = cameraUp.scale(-moveSpeed);
-    } else if (direction === 'backward') {
-      moveVec = cameraDirection.scale(moveSpeed);
-    } else if (direction === 'forward') {
-      moveVec = cameraDirection.scale(-moveSpeed);
-    }
-
+    if (direction === 'left') moveVec = cameraRight.scale(-moveSpeed);
+    if (direction === 'right') moveVec = cameraRight.scale(moveSpeed);
+    if (direction === 'up') moveVec = cameraUp.scale(moveSpeed);
+    if (direction === 'down') moveVec = cameraUp.scale(-moveSpeed);
+    if (direction === 'backward') moveVec = cameraDirection.scale(moveSpeed);
+    if (direction === 'forward') moveVec = cameraDirection.scale(-moveSpeed);
+    
     // 이동 적용
     p.position.x += moveVec.x;
     p.position.y += moveVec.y;
@@ -74,9 +63,7 @@
     flyCam.setTarget(new Vector3(p.position.x, p.position.y, p.position.z));
   }
 
-  function endRelease() {
-    rope.particles[endIndex].locked = !rope.particles[endIndex].locked;
-  }
+  const endRelease = () => rope.particles[endIndex].locked = !rope.particles[endIndex].locked;
 
   onMount(() => {
     if (window === undefined) return;
@@ -84,13 +71,15 @@
     scene = new Scene(engine);
 
     new HemisphericLight("light", new Vector3(0, 1, 0), scene);
+    const count = endIndex + 1;
     
-    rope = new RopeSimulator(scene, { x: 0, y: 5, z: 0 }, 10/ (endIndex + 1), endIndex + 1);
+    rope = new RopeSimulator(scene, { x: 0, y: 5, z: 0 }, 10 / count, count);
     flyCam = new ArcRotateCamera(
       "camera", Math.PI / 2, Math.PI / 4, 12, Vector3.Zero(), scene
     );
     flyCam.setTarget(new Vector3(rope.particles[endIndex].position.x, rope.particles[endIndex].position.y, rope.particles[endIndex].position.z));
     flyCam.attachControl(canvas, true);
+    flyCam.radius = 5;
 
     // right bottom of screen
     outCam = new ArcRotateCamera(
@@ -130,6 +119,29 @@
         case 'Shift':
           move("down");
           break;
+        case 'u':
+          zoom("in");
+          break;
+        case 'o':
+          zoom("out");
+          break;
+          case 'i':
+          rotateCam("up");
+          break;
+        case 'k':
+          rotateCam("down");
+          break;
+        case 'j':
+          rotateCam("left");
+          break;
+        case 'l':
+          rotateCam("right");
+          break;
+        case 'r':
+          endRelease();
+          break;
+        default:
+          break;
       }
     });
     window.addEventListener('blur', () => {
@@ -149,71 +161,115 @@
 </script>
 
 <style>
-  /* Flight Simulator Styled Controls */
-  .controls {
+  /* Container for all flight simulation controls */
+  .flight-controls {
     position: fixed;
     bottom: 2rem;
     left: 2rem;
-    display: grid;
-    grid-template-columns: repeat(3, auto);
-    grid-template-rows: repeat(3, auto);
-    grid-template-areas: 
-      ".    up    ."
-      "left forward right"
-      ".   down   .";
-    gap: 1rem;
-    padding: 1rem 1.5rem;
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 12px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+    display: flex;
+    gap: 2rem;
     z-index: 100;
   }
 
-  .controls button {
+  /* Movement controls styled as a D-pad */
+  .movement {
+    display: grid;
+    grid-template-columns: 60px 60px 60px;
+    grid-template-rows: 60px 60px 60px;
+    grid-template-areas:
+      ".    up    ."
+      "left forward right"
+      ".   down   .";
+    gap: 0.5rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+  }
+
+  .movement button {
     background: #222;
     color: #fff;
-    border: 2px solid #444;
+    border: none;
     border-radius: 8px;
-    padding: 0.75rem 1rem;
     font-size: 1rem;
     cursor: pointer;
     transition: background 0.2s, transform 0.1s;
   }
 
-  .controls button:hover {
-    background: #333;
+  .movement button:hover {
+    background: #444;
   }
 
-  .controls button:active {
+  .movement button:active {
     transform: scale(0.95);
   }
 
-  /* Assign grid areas to buttons */
-  .controls button:nth-child(1) { grid-area: up; }
-  .controls button:nth-child(2) { grid-area: left; }
-  .controls button:nth-child(3) { grid-area: right; }
-  .controls button:nth-child(4) { grid-area: down; }
-  .controls button:nth-child(5) { grid-area: forward; }
-  .controls button:nth-child(6) { grid-area: backward; }
-  .controls button:nth-child(7) {
-    grid-column: 2;
-    align-self: center;
-    justify-self: center;
+  .movement button.up    { grid-area: up; }
+  .movement button.left  { grid-area: left; }
+  .movement button.forward { grid-area: forward; }
+  .movement button.right { grid-area: right; }
+  .movement button.down  { grid-area: down; }
+
+  /* Camera and additional controls */
+  .camera-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+    min-width: 120px;
+  }
+
+  .camera-controls button {
+    background: #222;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+
+  .camera-controls button:hover {
+    background: #444;
+  }
+
+  .camera-controls button:active {
+    transform: scale(0.95);
   }
 </style>
 
-<div class="controls">
-  <button on:click={() => move("up")}>↑(Space)</button>
-  <button on:click={() => move("left")}>←(A)</button>
-  <button on:click={() => move("right")}>→(D)</button>
-  <button on:click={() => move("down")}>↓(Shift)</button>
-  <button on:click={() => move("forward")}>Forward(W)</button>
-  <button on:click={() => move("backward")}>Backward(D)</button>
-  <button on:click={() => zoom("in")}>Zoom In</button>
-  <button on:click={() => zoom("out")}>Zoom Out</button>
-  <button on:click={endRelease}>
-    End {rope?.particles[endIndex].locked ? 'Release' : 'Lock'}
-  </button>
+<div class="flight-controls">
+  <!-- Movement Control Panel -->
+  <div class="movement">
+    <button class="up" on:click={() => move("up")}>↑<br>(Space)</button>
+    <button class="left" on:click={() => move("left")}>←<br>(A)</button>
+    <button class="forward" on:click={() => move("forward")}>Fwd<br>(W)</button>
+    <button class="right" on:click={() => move("right")}>→<br>(D)</button>
+    <button class="down" on:click={() => move("down")}>↓<br>(Shift)</button>
+  </div>
+
+  <!-- Camera & Additional Controls -->
+  <div class="camera-controls">
+    <button on:click={() => move("backward")}>BackWard (S)</button>
+    <button on:click={() => zoom("in")}>Zoom In (U)</button>
+    <button on:click={() => zoom("out")}>Zoom Out (O)</button>
+    <button on:click={() => rotateCam("up")}>Rotate Up (I)</button>
+    <button on:click={() => rotateCam("down")}>Rotate Down (K)</button>
+    <button on:click={() => rotateCam("left")}>Rotate Left (J)</button>
+    <button on:click={() => rotateCam("right")}>Rotate Right (L)</button>
+    <button on:click={endRelease}>
+      {#if rope?.particles[endIndex]?.locked}
+        Position Lock (R)
+      {:else}
+        Position Unlock (R)
+      {/if}
+    </button>
+  </div>
 </div>
 
 <canvas

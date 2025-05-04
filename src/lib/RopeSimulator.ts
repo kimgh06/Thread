@@ -89,7 +89,6 @@ export class RopeSimulator {
   constraints: Constraint[] = [];
   // gravity: Vec3 = { x: 0, y: -0.01, z: 0 }; // Gravity Exists
   gravity: Vec3 = { x: 0, y: 0, z: 0 }; // No Gravity
-  lineMesh: BABYLON.LinesMesh;
   public balls: BABYLON.Mesh[] = [];
 
   private initializeBalls(scene: BABYLON.Scene) {
@@ -152,21 +151,10 @@ export class RopeSimulator {
     this.particles[0].locked = true;
 
     // 제약 생성
-    for (let i = 0; i < count - 1; i++) {
+    for (let i = 0; i < count - 1; i++)
       this.constraints.push(
         new Constraint(this.particles[i], this.particles[i + 1])
       );
-    }
-
-    // Babylon.js 선 메쉬
-    const linePoints = this.particles.map(
-      (p) => new BABYLON.Vector3(p.position.x, p.position.y, p.position.z)
-    );
-    this.lineMesh = BABYLON.MeshBuilder.CreateLines(
-      "rope",
-      { points: linePoints, updatable: true },
-      scene
-    );
 
     // 공 메쉬 초기화
     this.initializeBalls(scene);
@@ -208,29 +196,16 @@ export class RopeSimulator {
     }
 
     // Constants for constraint satisfactions
-    for (let i = 0; i < 5; i++) {
-      for (const c of this.constraints) c.satisfy();
-    }
+    for (let i = 0; i < 5; i++) for (const c of this.constraints) c.satisfy();
 
     // 파티클 위치 공으로 표시
-    if (debug) {
-      this.updateBalls();
-    } else {
-      for (let i = 0; i < this.balls.length; i++) {
+    if (debug) this.updateBalls();
+    else
+      for (let i = 0; i < this.balls.length; i++)
         this.balls[i].position.copyFromFloats(
           this.particles[i].position.x,
           this.particles[i].position.y,
           this.particles[i].position.z
         );
-      }
-    }
-
-    // 선 메쉬 업데이트
-    this.lineMesh = BABYLON.MeshBuilder.CreateLines("rope", {
-      points: this.particles.map(
-        (p) => new BABYLON.Vector3(p.position.x, p.position.y, p.position.z)
-      ),
-      instance: this.lineMesh,
-    });
   }
 }
