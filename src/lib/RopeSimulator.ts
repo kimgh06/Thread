@@ -1,42 +1,26 @@
 import * as BABYLON from "@babylonjs/core";
 
-// ====== 벡터 연산 ======
-type Vec3 = { x: number; y: number; z: number };
-
-function sub(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-function add(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
-}
-function mul(v: Vec3, s: number): Vec3 {
-  return { x: v.x * s, y: v.y * s, z: v.z * s };
-}
-function length(v: Vec3): number {
-  return Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2);
-}
-function normalize(v: Vec3): Vec3 {
-  const len = length(v);
-  return len === 0 ? v : mul(v, 1 / len);
-}
-
 // ====== 파티클 (질량점) ======
 class Particle {
-  position: Vec3;
-  prevPosition: Vec3;
   locked: boolean = false;
+  mesh: BABYLON.Mesh;
+  // For Verlet integration we keep a copy of the previous mesh position.
+  prevMesh: BABYLON.Vector3;
 
-  constructor(pos: Vec3) {
-    this.position = { ...pos };
-    this.prevPosition = { ...pos };
+  constructor(pos: BABYLON.Vector3) {
+    // Create a temporary mesh – it will be replaced in initializeMeshes.
+    this.mesh = new BABYLON.Mesh("dummy", undefined!);
+    this.mesh.isPickable = true;
+    this.mesh.position = pos.clone();
+    this.prevMesh = pos.clone();
   }
 
-  applyVerlet(gravity: Vec3) {
+  applyVerlet(gravity: BABYLON.Vector3) {
     if (this.locked) return;
-    const temp = { ...this.position };
-    const velocity = sub(this.position, this.prevPosition);
-    this.position = add(add(this.position, velocity), gravity);
-    this.prevPosition = temp;
+    const temp = this.mesh.position.clone();
+    const velocity = this.mesh.position.subtract(this.prevMesh);
+    this.mesh.position.addInPlace(velocity).addInPlace(gravity);
+    this.prevMesh = temp;
   }
 }
 
@@ -49,36 +33,38 @@ class Constraint {
   constructor(p1: Particle, p2: Particle) {
     this.p1 = p1;
     this.p2 = p2;
-    this.restLength = length(sub(p2.position, p1.position));
+    this.restLength = BABYLON.Vector3.Distance(
+      p2.mesh.position,
+      p1.mesh.position
+    );
   }
 
   satisfy() {
-    const delta = sub(this.p2.position, this.p1.position);
-    const dist = length(delta);
-    if (dist === 0) return; // divide-by-zero 방지
-
+    const delta = this.p2.mesh.position.subtract(this.p1.mesh.position);
+    const dist = delta.length();
+    if (dist === 0) return; // avoid divide-by-zero
     const diff = (dist - this.restLength) / dist;
-    const stiffness = 0.5; // 0~1 (낮을수록 덜 correction)
-    const correction = mul(delta, diff * stiffness);
+    const stiffness = 0.5;
+    const correction = delta.scale(diff * stiffness);
 
     if (!this.p1.locked && !this.p2.locked) {
-      this.p1.position = add(this.p1.position, mul(correction, 0.5));
-      this.p2.position = sub(this.p2.position, mul(correction, 0.5));
+      this.p1.mesh.position.addInPlace(correction.scale(0.5));
+      this.p2.mesh.position.subtractInPlace(correction.scale(0.5));
     } else if (this.p1.locked && !this.p2.locked) {
-      this.p2.position = sub(this.p2.position, correction);
+      this.p2.mesh.position.subtractInPlace(correction);
     } else if (!this.p1.locked && this.p2.locked) {
-      this.p1.position = add(this.p1.position, correction);
+      this.p1.mesh.position.addInPlace(correction);
     }
 
-    // Apply damping to reduce energy over time.
-    const damping = 0.99; // 0 ~ 1
+    // Damping to reduce energy.
+    const damping = 0.99;
     if (!this.p1.locked) {
-      const velocity1 = sub(this.p1.prevPosition, this.p1.position);
-      this.p1.prevPosition = add(this.p1.position, mul(velocity1, damping));
+      const velocity1 = this.p1.prevMesh.subtract(this.p1.mesh.position);
+      this.p1.prevMesh = this.p1.mesh.position.add(velocity1.scale(damping));
     }
     if (!this.p2.locked) {
-      const velocity2 = sub(this.p2.prevPosition, this.p2.position);
-      this.p2.prevPosition = add(this.p2.position, mul(velocity2, damping));
+      const velocity2 = this.p2.prevMesh.subtract(this.p2.mesh.position);
+      this.p2.prevMesh = this.p2.mesh.position.add(velocity2.scale(damping));
     }
   }
 }
@@ -87,125 +73,117 @@ class Constraint {
 export class RopeSimulator {
   particles: Particle[] = [];
   constraints: Constraint[] = [];
-  // gravity: Vec3 = { x: 0, y: -0.01, z: 0 }; // Gravity Exists
-  gravity: Vec3 = { x: 0, y: 0, z: 0 }; // No Gravity
-  public balls: BABYLON.Mesh[] = [];
+  gravity: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
 
-  private initializeBalls(scene: BABYLON.Scene) {
-    for (let i = 0; i < this.particles.length - 1; i++) {
-      const sphere = BABYLON.MeshBuilder.CreateSphere(
-        "ball" + i,
-        { diameter: 0.05 },
-        scene
-      );
-      sphere.position = new BABYLON.Vector3(
-        this.particles[i].position.x,
-        this.particles[i].position.y,
-        this.particles[i].position.z
-      );
-      const redMaterial = new BABYLON.StandardMaterial("redMaterial", scene);
-      redMaterial.diffuseColor = new BABYLON.Color3(0, 1, 0);
-      sphere.material = redMaterial;
-      this.balls.push(sphere);
+  private initializeMeshes(scene: BABYLON.Scene, selectedIndex: number) {
+    for (let i = 0; i < this.particles.length; i++) {
+      let sphere: BABYLON.Mesh;
+      if (i !== selectedIndex) {
+        sphere = BABYLON.MeshBuilder.CreateSphere(
+          "mesh" + i,
+          { diameter: 0.05 },
+          scene
+        );
+        const greenMaterial = new BABYLON.StandardMaterial(
+          "greenMaterial" + i,
+          scene
+        );
+        greenMaterial.diffuseColor = new BABYLON.Color3(0, 1, 0);
+        sphere.material = greenMaterial;
+      } else {
+        sphere = BABYLON.MeshBuilder.CreateSphere(
+          "mesh" + i,
+          { diameter: 0.05 },
+          scene
+        );
+        const redMaterial = new BABYLON.StandardMaterial(
+          "redMaterial" + i,
+          scene
+        );
+        redMaterial.diffuseColor = new BABYLON.Color3(1, 0, 0);
+        sphere.material = redMaterial;
+      }
+      sphere.position = this.particles[i].mesh.position.clone();
+      // 기존 메시 삭제
+      this.particles[i].mesh.dispose();
+      this.particles[i].mesh = sphere;
+      this.particles[i].mesh.isPickable = true;
+      this.particles[i].mesh.isVisible = true;
+      // Sync previous mesh position with the new mesh position.
+      this.particles[i].prevMesh = sphere.position.clone();
     }
-    // last one is red
-    const lastSphere = BABYLON.MeshBuilder.CreateSphere(
-      "ball" + (this.particles.length - 1),
-      { diameter: 0.05 },
-      scene
-    );
-    lastSphere.position = new BABYLON.Vector3(
-      this.particles[this.particles.length - 1].position.x,
-      this.particles[this.particles.length - 1].position.y,
-      this.particles[this.particles.length - 1].position.z
-    );
-    const redMaterial = new BABYLON.StandardMaterial("redMaterial", scene);
-    redMaterial.diffuseColor = new BABYLON.Color3(1, 0, 0);
-    lastSphere.material = redMaterial;
-    this.balls.push(lastSphere);
   }
 
-  private updateBalls() {
-    for (let i = 0; i < this.balls.length; i++) {
-      this.balls[i].position.copyFromFloats(
-        this.particles[i].position.x,
-        this.particles[i].position.y,
-        this.particles[i].position.z
-      );
+  private updateParticles(selectedIndex: number) {
+    for (let i = 0; i < this.particles.length; i++) {
+      const material = this.particles[i].mesh
+        .material as BABYLON.StandardMaterial;
+      material.diffuseColor =
+        i === selectedIndex
+          ? new BABYLON.Color3(1, 0, 0)
+          : new BABYLON.Color3(0, 1, 0);
     }
   }
 
   constructor(
     scene: BABYLON.Scene,
-    start: Vec3,
+    start: BABYLON.Vector3,
     segmentLength = 1,
     count = 10
   ) {
-    // 파티클 생성
+    // Create particles using the starting position.
     for (let i = 0; i < count; i++) {
-      const pos = { x: start.x, y: start.y - i * segmentLength, z: start.z };
+      const pos = start.add(new BABYLON.Vector3(0, -i * segmentLength, 0));
       this.particles.push(new Particle(pos));
     }
 
-    // 첫 번째 파티클 고정
+    // Lock the first particle.
     this.particles[0].locked = true;
 
-    // 제약 생성
-    for (let i = 0; i < count - 1; i++)
+    // Create constraints between consecutive particles.
+    for (let i = 0; i < count - 1; i++) {
       this.constraints.push(
         new Constraint(this.particles[i], this.particles[i + 1])
       );
+    }
 
-    // 공 메쉬 초기화
-    this.initializeBalls(scene);
+    this.initializeMeshes(scene, count - 1);
   }
 
-  update(debug = false) {
-    // Verlet integration
-    for (const p of this.particles) p.applyVerlet(this.gravity);
+  update(selectedIndex: number) {
+    // Verlet integration update.
+    for (const p of this.particles) {
+      p.applyVerlet(this.gravity);
+    }
 
-    // self-collision
-    for (let sc = 0; sc < 3; sc++) {
+    // Self-collision resolution.
+    for (let times = 0; times < 3; times++) {
       for (let i = 0; i < this.particles.length; i++) {
         for (let j = i + 2; j < this.particles.length; j++) {
-          // 인접 제외
-          const delta = sub(
-            this.particles[j].position,
-            this.particles[i].position
+          const delta = this.particles[j].mesh.position.subtract(
+            this.particles[i].mesh.position
           );
-          const dist = length(delta);
-          const minDist = 0.05; // 원하는 최소 거리
-
+          const dist = delta.length();
+          const minDist = 0.05;
           if (dist < minDist && dist > 0) {
             const diff = (minDist - dist) / dist;
-            const correction = mul(delta, diff * 0.5);
-
+            const correction = delta.scale(diff * 0.5);
             if (!this.particles[i].locked)
-              this.particles[i].position = sub(
-                this.particles[i].position,
-                correction
-              );
+              this.particles[i].mesh.position.subtractInPlace(correction);
             if (!this.particles[j].locked)
-              this.particles[j].position = add(
-                this.particles[j].position,
-                correction
-              );
+              this.particles[j].mesh.position.addInPlace(correction);
           }
         }
       }
     }
 
-    // Constants for constraint satisfactions
-    for (let i = 0; i < 5; i++) for (const c of this.constraints) c.satisfy();
+    // Constraint satisfaction.
+    for (let i = 0; i < 5; i++) {
+      for (const c of this.constraints) {
+        c.satisfy();
+      }
+    }
 
-    // 파티클 위치 공으로 표시
-    if (debug) this.updateBalls();
-    else
-      for (let i = 0; i < this.balls.length; i++)
-        this.balls[i].position.copyFromFloats(
-          this.particles[i].position.x,
-          this.particles[i].position.y,
-          this.particles[i].position.z
-        );
+    this.updateParticles(selectedIndex);
   }
 }

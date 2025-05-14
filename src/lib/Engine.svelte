@@ -1,10 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, MeshBuilder, Mesh, Viewport} from '@babylonjs/core';
+  import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, MeshBuilder, Mesh, Viewport } from '@babylonjs/core';
   import { RopeSimulator } from './RopeSimulator';
 
-  const moveSpeed = 0.09; // 이동 속도
+  const moveSpeed = 0.08; // 이동 속도
+  const rotationSpeed = 0.05; // 회전 속도
   const zoomSpeed = 1.3;
+  const pressedKeys = new Set<string>();
+  const originPosition = Vector3.Zero();
+
   let canvas: HTMLCanvasElement;
   let flyCam: ArcRotateCamera;
   let outCam: ArcRotateCamera;
@@ -12,10 +16,21 @@
   let scene: Scene;
   let rope: RopeSimulator;
   let box: Mesh;
-  const pressedKeys = new Set<string>();
 
   const startIndex = 0; 
   const endIndex = 499;
+  let selectedIndex = endIndex;
+
+  function updateCamPosition() {
+    if (!rope) return;
+    const p = rope.particles[selectedIndex].mesh;
+    // 카메라 타겟 업데이트
+    // Calculate the current offset between the camera's position and its target
+    const offset = flyCam.position.subtract(flyCam.getTarget());
+    // Move the camera while preserving the original offset
+    flyCam.setPosition(new Vector3(p.position.x, p.position.y, p.position.z).add(offset));
+    flyCam.setTarget(new Vector3(p.position.x, p.position.y, p.position.z));
+  }
 
   function zoom(arg: "in" | "out") {
     if (!rope) return;
@@ -25,16 +40,16 @@
 
   function rotateCam(arg: "left" | "right" | "up" | "down") {
     if (!rope) return;
-    if (arg === "left") flyCam.alpha += moveSpeed;
-    if (arg === "right") flyCam.alpha -= moveSpeed;
-    if (arg === "up") flyCam.beta += moveSpeed;
-    if (arg === "down") flyCam.beta -= moveSpeed;
+    if (arg === "left") flyCam.alpha += rotationSpeed;
+    if (arg === "right") flyCam.alpha -= rotationSpeed;
+    if (arg === "up") flyCam.beta += rotationSpeed;
+    if (arg === "down") flyCam.beta -= rotationSpeed;
   }
 
   // up - down - left - right
   function move(direction: string) {
     if (!rope) return;
-    const p = rope.particles[endIndex];
+    const mesh = rope.particles[selectedIndex].mesh;
     const cameraMatrix = flyCam.getViewMatrix().invert();
     const  [row1, row2, row3] = [cameraMatrix.getRow(0), cameraMatrix.getRow(1), cameraMatrix.getRow(2)]
 
@@ -52,119 +67,105 @@
     if (direction === 'forward') moveVec = cameraDirection.scale(-moveSpeed);
     
     // 이동 적용
-    p.position.x += moveVec.x;
-    p.position.y += moveVec.y;
-    p.position.z += moveVec.z;
+    mesh.position.x += moveVec.x;
+    mesh.position.y += moveVec.y;
+    mesh.position.z += moveVec.z;
+    console.log(mesh.position)
 
-    // 카메라 타겟 업데이트
-    // Calculate the current offset between the camera's position and its target
-    const offset = flyCam.position.subtract(flyCam.getTarget());
-    // Move the camera while preserving the original offset
-    flyCam.setPosition(new Vector3(p.position.x, p.position.y, p.position.z).add(offset));
-    flyCam.setTarget(new Vector3(p.position.x, p.position.y, p.position.z));
+    updateCamPosition(); 
   }
-
+  
   const controlFunction = () =>{
     if (!rope) return;
     // Handle key presses for movement and camera rotation
     for (const key of pressedKeys) {
       switch (key) {
-        case 'w':
-          move("forward");
-          break;
-        case 's':
-          move("backward");
-          break;
-        case 'a':
-          move("left");
-          break;
-        case 'd':
-          move("right");
-          break;
-        case ' ':
-          move("up");
-          break;
-        case 'Shift':
-          move("down");
-          break;
-        case 'u':
-          zoom("in");
-          break;
-        case 'o':
-          zoom("out");
-          break;
-        case 'i':
-          rotateCam("up");
-          break;
-        case 'k':
-          rotateCam("down");
-          break;
-        case 'j':
-          rotateCam("left");
-          break;
-        case 'l':
-          rotateCam("right");
-          break;
-        case 'r':
-          endRelease();
-          break;
-        default:
-          break;
+        case ' ': move("up"); break;
+        case 'w': move("forward"); break;
+        case 's': move("backward"); break;
+        case 'a': move("left"); break;
+        case 'd': move("right"); break;
+        case 'Shift': move("down"); break;
+        case 'u': zoom("in"); break;
+        case 'o': zoom("out"); break;
+        case 'i': rotateCam("up"); break;
+        case 'k': rotateCam("down"); break;
+        case 'j': rotateCam("left"); break;
+        case 'l': rotateCam("right"); break;
+        case 'r': endRelease(); break;
+        default: break;
       }
     }
   }
 
-  const endRelease = () => rope.particles[endIndex].locked = !rope.particles[endIndex].locked;
+  const renderScene = () => {
+    engine.runRenderLoop(() => {
+      scene.render();
+      controlFunction();
+    });
+  };
+
+  const stopRenderScene = () => {
+    if (!engine) return;
+    engine.stopRenderLoop();
+  };  
+
+  const endRelease = () => rope.particles[selectedIndex].locked = !rope.particles[selectedIndex].locked;
 
   onMount(() => {
     if (window === undefined) return;
     engine = new Engine(canvas, true);
     scene = new Scene(engine);
 
+    // Enable picking on the scene
+    scene.defaultCursor = "pointer";
+    scene.constantlyUpdateMeshUnderPointer = true;
+
     new HemisphericLight("light", new Vector3(0, 1, 0), scene);
     const count = endIndex + 1;
     
-    rope = new RopeSimulator(scene, { x: 0, y: 5, z: 0 }, 10 / count, count);
-    flyCam = new ArcRotateCamera("camera", Math.PI / 2, Math.PI / 4, 12, Vector3.Zero(), scene);
-    flyCam.setTarget(new Vector3(rope.particles[endIndex].position.x, rope.particles[endIndex].position.y, rope.particles[endIndex].position.z));
+    rope = new RopeSimulator(scene, new Vector3(0, 5, 0), 10 / count, count);
+    flyCam = new ArcRotateCamera("camera", Math.PI / 2, Math.PI / 4, 12, originPosition, scene);
+    const selectedParticleMesh = rope.particles[selectedIndex].mesh;
+    flyCam.setTarget(new Vector3(selectedParticleMesh.position.x, selectedParticleMesh.position.y, selectedParticleMesh.position.z));
     flyCam.attachControl(canvas, true);
     flyCam.radius = 5; // set zoom level
 
     // right bottom of screen
     outCam = new ArcRotateCamera(
-      "camera", Math.PI / 2, Math.PI / 4, 12, Vector3.Zero(), scene
+      "camera", Math.PI / 2, Math.PI / 4, 12, originPosition, scene
     );
     outCam.setPosition(new Vector3(0, 2, -10));
-    outCam.setTarget(Vector3.Zero())
+    outCam.setTarget(originPosition)
     outCam.viewport = new Viewport(0.75, 0.75, 0.25, 0.25); // right bottom of screen
-    
     scene.activeCameras = [flyCam, outCam];
 
-    scene.onBeforeRenderObservable.add(() => rope.update());
-    engine.runRenderLoop(() => {
-      scene.render();
-    });
-
-    box = MeshBuilder.CreateBox("box", {}, scene);
+    scene.onBeforeRenderObservable.add(() => rope.update(selectedIndex));
+    
+    box = MeshBuilder.CreateBox("box", {}, scene); // Create a box mesh for testing
 
     // add keyboard controls
     window.addEventListener('keydown', (event) => {
       if (!pressedKeys.has(event.key)) pressedKeys.add(event.key);
     });
-    window.addEventListener('keyup', (event) => {
-      pressedKeys.delete(event.key); // Remove key from pressed keys
-    });
-    window.addEventListener('blur', () => {
+    window.addEventListener('keyup', (event) => pressedKeys.delete(event.key));
+    window.addEventListener('blur', (event) => {
       // Pause the simulation when the window loses focus
-      engine.stopRenderLoop();
+      stopRenderScene();
     });
-    window.addEventListener('focus', () => {
+    window.addEventListener('focus', (event) => {
       // Resume the simulation when the window regains focus
-      engine.runRenderLoop(() => {
-        scene.render();
-        controlFunction();
-      });
+      renderScene();
     });
+
+    // 기준 카메라 로부터의 거리 계산
+    scene.onPointerDown = (evt) => {
+      const [x, y] = [scene.pointerX, scene.pointerY];
+      const pickResult = scene.pick(x, y, (mesh) => mesh.name === "box", false, scene.activeCamera);
+      console.log(pickResult);
+    };
+
+    renderScene();
 
     window.addEventListener('resize', () => engine.resize());
     return () => engine.dispose();
@@ -274,7 +275,7 @@
     <button on:click={() => rotateCam("left")}>Rotate Left (J)</button>
     <button on:click={() => rotateCam("right")}>Rotate Right (L)</button>
     <button on:click={endRelease}>
-      {#if rope?.particles[endIndex]?.locked}
+      {#if rope?.particles[selectedIndex]?.locked}
         Position Locked (R)
       {:else}
         Position Unlocked (R)
