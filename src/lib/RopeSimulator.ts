@@ -90,6 +90,19 @@ export class RopeSimulator {
         );
         greenMaterial.diffuseColor = new BABYLON.Color3(0, 1, 0);
         sphere.material = greenMaterial;
+      } else if (this.particles[i].locked) {
+        // yellow for locked particles
+        sphere = BABYLON.MeshBuilder.CreateSphere(
+          "mesh" + i,
+          { diameter: 0.05 },
+          scene
+        );
+        const yellowMaterial = new BABYLON.StandardMaterial(
+          "yellowMaterial" + i,
+          scene
+        );
+        yellowMaterial.diffuseColor = new BABYLON.Color3(1, 1, 0);
+        sphere.material = yellowMaterial;
       } else {
         sphere = BABYLON.MeshBuilder.CreateSphere(
           "mesh" + i,
@@ -104,11 +117,11 @@ export class RopeSimulator {
         sphere.material = redMaterial;
       }
       sphere.position = this.particles[i].mesh.position.clone();
+      sphere.isPickable = true;
+      sphere.isVisible = true;
       // 기존 메시 삭제
       this.particles[i].mesh.dispose();
       this.particles[i].mesh = sphere;
-      this.particles[i].mesh.isPickable = true;
-      this.particles[i].mesh.isVisible = true;
       // Sync previous mesh position with the new mesh position.
       this.particles[i].prevMesh = sphere.position.clone();
     }
@@ -118,10 +131,13 @@ export class RopeSimulator {
     for (let i = 0; i < this.particles.length; i++) {
       const material = this.particles[i].mesh
         .material as BABYLON.StandardMaterial;
+
       material.diffuseColor =
         i === selectedIndex
-          ? new BABYLON.Color3(1, 0, 0)
-          : new BABYLON.Color3(0, 1, 0);
+          ? new BABYLON.Color3(1, 0, 0) // red for selected particle
+          : this.particles[i].locked
+            ? new BABYLON.Color3(1, 1, 0) // yellow for locked particles
+            : new BABYLON.Color3(0, 1, 0); // green for other particles
     }
   }
 

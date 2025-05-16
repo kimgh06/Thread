@@ -17,7 +17,8 @@
   let rope: RopeSimulator;
   let box: Mesh;
 
-  const startIndex = 0; 
+  // to do view locked particle list on screen
+
   const endIndex = 499;
   let selectedIndex = endIndex;
 
@@ -70,7 +71,6 @@
     mesh.position.x += moveVec.x;
     mesh.position.y += moveVec.y;
     mesh.position.z += moveVec.z;
-    console.log(mesh.position)
 
     updateCamPosition(); 
   }
@@ -81,10 +81,10 @@
     for (const key of pressedKeys) {
       switch (key) {
         case ' ': move("up"); break;
-        case 'w': move("forward"); break;
-        case 's': move("backward"); break;
         case 'a': move("left"); break;
         case 'd': move("right"); break;
+        case 'w': move("forward"); break;
+        case 's': move("backward"); break;
         case 'Shift': move("down"); break;
         case 'u': zoom("in"); break;
         case 'o': zoom("out"); break;
@@ -158,11 +158,14 @@
       renderScene();
     });
 
-    // 기준 카메라 로부터의 거리 계산
+    // 기준 카메라로 부터의 거리 계산
     scene.onPointerDown = (evt) => {
       const [x, y] = [scene.pointerX, scene.pointerY];
-      const pickResult = scene.pick(x, y, (mesh) => mesh.name === "box", false, scene.activeCamera);
-      console.log(pickResult);
+      const pickResult = scene.pick(x, y, undefined, false, flyCam);
+      if (!pickResult || !pickResult.hit) return;
+      const pickedMesh = pickResult.pickedMesh;
+      if (!pickedMesh) return;
+      selectedIndex = rope.particles.findIndex(p => p.mesh === pickedMesh);
     };
 
     renderScene();
