@@ -57,7 +57,7 @@ class Constraint {
     }
 
     // Damping to reduce energy.
-    const damping = 0.99;
+    const damping = 0.5;
     if (!this.p1.locked) {
       const velocity1 = this.p1.prevMesh.subtract(this.p1.mesh.position);
       this.p1.prevMesh = this.p1.mesh.position.add(velocity1.scale(damping));
@@ -145,12 +145,20 @@ export class RopeSimulator {
     scene: BABYLON.Scene,
     start: BABYLON.Vector3,
     segmentLength = 1,
-    count = 10
+    count = 10,
+    positions: BABYLON.Vector3[] = []
   ) {
     // Create particles using the starting position.
-    for (let i = 0; i < count; i++) {
-      const pos = start.add(new BABYLON.Vector3(0, -i * segmentLength, 0));
-      this.particles.push(new Particle(pos));
+    if (positions.length > 0) {
+      for (let i = 0; i < positions.length; i++) {
+        const pos = start.add(positions[i]);
+        this.particles.push(new Particle(pos));
+      }
+    } else {
+      for (let i = 0; i < count; i++) {
+        const pos = start.add(new BABYLON.Vector3(0, -i * segmentLength, 0));
+        this.particles.push(new Particle(pos));
+      }
     }
 
     // Lock the first particle.

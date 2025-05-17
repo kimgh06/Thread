@@ -5,8 +5,26 @@
 
   const moveSpeed = 0.08; // 이동 속도
   const rotationSpeed = 0.05; // 회전 속도
-  const zoomSpeed = 1.3;
-  const pressedKeys = new Set<string>();
+  const zoomSpeed = 1.05;
+  const pressedKeys = {
+    ' ': false,
+    'a': false,
+    'd': false,
+    'w': false,
+    's': false,
+    'shift': false,
+    'u': false,
+    'o': false,
+    'i': false,
+    'k': false,
+    'l': false,
+    'j': false,
+    'r': false
+  }
+  const unPressedKeys = {
+    'r': false,
+  }
+
   const originPosition = Vector3.Zero();
 
   let canvas: HTMLCanvasElement;
@@ -78,24 +96,22 @@
   const controlFunction = () =>{
     if (!rope) return;
     // Handle key presses for movement and camera rotation
-    for (const key of pressedKeys) {
-      switch (key) {
-        case ' ': move("up"); break;
-        case 'a': move("left"); break;
-        case 'd': move("right"); break;
-        case 'w': move("forward"); break;
-        case 's': move("backward"); break;
-        case 'Shift': move("down"); break;
-        case 'u': zoom("in"); break;
-        case 'o': zoom("out"); break;
-        case 'i': rotateCam("up"); break;
-        case 'k': rotateCam("down"); break;
-        case 'j': rotateCam("left"); break;
-        case 'l': rotateCam("right"); break;
-        case 'r': endRelease(); break;
-        default: break;
-      }
-    }
+    if (pressedKeys[' ']) move("up");
+    if (pressedKeys['a']) move("left");
+    if (pressedKeys['d']) move("right");
+    if (pressedKeys['w']) move("forward");
+    if (pressedKeys['s']) move("backward");
+    if (pressedKeys['shift']) move("down");
+    if (pressedKeys['u']) zoom("in");
+    if (pressedKeys['o']) zoom("out");
+    if (pressedKeys['i']) rotateCam("up");
+    if (pressedKeys['k']) rotateCam("down");
+    if (pressedKeys['l']) rotateCam("right");
+    if (pressedKeys['j']) rotateCam("left");
+    if (pressedKeys['r'] && unPressedKeys['r']) {
+      unPressedKeys['r'] = false;
+      endRelease();
+    } 
   }
 
   const renderScene = () => {
@@ -124,7 +140,7 @@
     new HemisphericLight("light", new Vector3(0, 1, 0), scene);
     const count = endIndex + 1;
     
-    rope = new RopeSimulator(scene, new Vector3(0, 5, 0), 10 / count, count);
+    rope = new RopeSimulator(scene, new Vector3(0, 5, 0), 10 / count, count, []);
     flyCam = new ArcRotateCamera("camera", Math.PI / 2, Math.PI / 4, 12, originPosition, scene);
     const selectedParticleMesh = rope.particles[selectedIndex].mesh;
     flyCam.setTarget(new Vector3(selectedParticleMesh.position.x, selectedParticleMesh.position.y, selectedParticleMesh.position.z));
@@ -146,9 +162,14 @@
 
     // add keyboard controls
     window.addEventListener('keydown', (event) => {
-      if (!pressedKeys.has(event.key)) pressedKeys.add(event.key);
+      const key = event.key.toLowerCase() as keyof typeof pressedKeys;
+      if (!pressedKeys[key]) pressedKeys[key] = true;
     });
-    window.addEventListener('keyup', (event) => pressedKeys.delete(event.key));
+    window.addEventListener('keyup', (event) => {
+      const key = event.key.toLowerCase() as keyof typeof pressedKeys;
+      if (pressedKeys[key]) pressedKeys[key] = false;
+      if (key === 'r') unPressedKeys['r'] = true; // Reset the unPressedKeys for 'r' when released
+    });
     window.addEventListener('blur', (event) => {
       // Pause the simulation when the window loses focus
       stopRenderScene();
@@ -166,6 +187,7 @@
       const pickedMesh = pickResult.pickedMesh;
       if (!pickedMesh) return;
       selectedIndex = rope.particles.findIndex(p => p.mesh === pickedMesh);
+      updateCamPosition();
     };
 
     renderScene();
@@ -176,113 +198,161 @@
 </script>
 
 <style>
-  /* Container for all flight simulation controls */
   .flight-controls {
     position: fixed;
     bottom: 2rem;
     left: 2rem;
     display: flex;
-    gap: 2rem;
+    flex-direction: column;
+    gap: 1rem;
     z-index: 100;
   }
 
-  /* Movement controls styled as a D-pad */
-  .movement {
+  .control-container {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+  }
+
+  .control-section {
     display: grid;
-    grid-template-columns: 60px 60px 60px;
-    grid-template-rows: 60px 60px 60px;
-    grid-template-areas:
-      ".    up    ."
-      "left forward right"
-      ".   down   .";
+    grid-template-columns: repeat(2, 40px);
+    grid-template-rows: repeat(2, 40px);
     gap: 0.5rem;
-    padding: 1rem;
+    padding: 0.5rem;
     background: rgba(0, 0, 0, 0.7);
     border-radius: 12px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+    transform: rotate(45deg);
   }
 
-  .movement button {
+  .section-container{
+    display: flex;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+
+  .section-label {
+    grid-column: span 3;
+    text-align: center;
+    color: white;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+  }
+
+  .action-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 12px;
+    width: 100%;
+  }
+
+  button {
     background: #222;
     color: #fff;
     border: none;
     border-radius: 8px;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
-  }
-
-  .movement button:hover {
-    background: #444;
-  }
-
-  .movement button:active {
-    transform: scale(0.95);
-  }
-
-  .movement button.up    { grid-area: up; }
-  .movement button.left  { grid-area: left; }
-  .movement button.forward { grid-area: forward; }
-  .movement button.right { grid-area: right; }
-  .movement button.down  { grid-area: down; }
-
-  /* Camera and additional controls */
-  .camera-controls {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-    padding: 1rem;
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 12px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
-    min-width: 120px;
-  }
-
-  .camera-controls button {
-    background: #222;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
+    padding: 0.5rem;
     font-size: 0.9rem;
-    padding: 0.5rem 1rem;
     cursor: pointer;
     transition: background 0.2s, transform 0.1s;
   }
 
-  .camera-controls button:hover {
+  .control-section button div {
+    color: red;
+    transform: rotate(-45deg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  button:hover {
     background: #444;
   }
 
-  .camera-controls button:active {
-    transform: scale(0.95);
+  .particle-info {
+    color: white;
+    font-size: 0.7rem;
+  }
+
+  .active {
+    background: #444;
+    transform: scale(0.7);
   }
 </style>
 
 <div class="flight-controls">
-  <!-- Movement Control Panel -->
-  <div class="movement">
-    <button class="up" on:click={() => move("up")}>↑<br>(Space)</button>
-    <button class="left" on:click={() => move("left")}>←<br>(A)</button>
-    <button class="forward" on:click={() => move("forward")}>Fwd<br>(W)</button>
-    <button class="right" on:click={() => move("right")}>→<br>(D)</button>
-    <button class="down" on:click={() => move("down")}>↓<br>(Shift)</button>
+  <div class="control-container">
+    <!-- Movement Controls -->
+    <div class="section-container">
+      <div class="section-label">Move To</div>
+      <div class="control-section">
+        <button class:active={pressedKeys['w']} on:click={() => move("forward")}>
+          <div>(W)</div>
+        </button>
+        <button class:active={pressedKeys['d']} on:click={() => move("right")}>
+          <div>(D)</div>
+        </button>
+        <button class:active={pressedKeys['a']} on:click={() => move("left")}>
+          <div>(A)</div>
+        </button>
+        <button class:active={pressedKeys['s']} on:click={() => move("backward")}>
+          <div>(S)</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Look Controls -->
+    <div class="section-container">
+      <div class="section-label">Look At</div>
+      <div class="control-section">
+        <button class:active={pressedKeys['i']} on:click={() => rotateCam("up")}>
+          <div>(I)</div>
+        </button>
+        <button class:active={pressedKeys['l']} on:click={() => rotateCam("right")}>
+          <div>(L)</div>
+        </button>
+        <button class:active={pressedKeys['j']} on:click={() => rotateCam("left")}>
+          <div>(J)</div>
+        </button>
+        <button class:active={pressedKeys['k']} on:click={() => rotateCam("down")}>
+          <div>(K)</div>
+        </button>
+      </div>
+    </div> 
   </div>
 
-  <!-- Camera & Additional Controls -->
-  <div class="camera-controls">
-    <button on:click={() => move("backward")}>BackWard (S)</button>
-    <button on:click={() => zoom("in")}>Zoom In (U)</button>
-    <button on:click={() => zoom("out")}>Zoom Out (O)</button>
-    <button on:click={() => rotateCam("up")}>Rotate Up (I)</button>
-    <button on:click={() => rotateCam("down")}>Rotate Down (K)</button>
-    <button on:click={() => rotateCam("left")}>Rotate Left (J)</button>
-    <button on:click={() => rotateCam("right")}>Rotate Right (L)</button>
-    <button on:click={endRelease}>
-      {#if rope?.particles[selectedIndex]?.locked}
-        Position Locked (R)
-      {:else}
-        Position Unlocked (R)
+  <!-- Action Buttons -->
+  <div class="action-buttons">
+    <button class:active={pressedKeys[' ']} on:click={() => move("up")}>
+      <div>↑ (Space)</div>
+    </button>
+    <button class:active={pressedKeys['r']} on:click={() => endRelease()}>
+      <div>
+        {#if rope?.particles[selectedIndex]?.locked}
+        🔒
+        {:else}
+        🔓
+        {/if} (R)</div>
+      </button>
+    <button class:active={pressedKeys['u']} on:click={() => zoom("in")}>
+      <div>Zoom In (U)</div>
+    </button>
+    <button class:active={pressedKeys['shift']} on:click={() => move("down")}>
+      <div>↓ (Shift)</div>
+    </button>
+    <div class="particle-info">
+      {#if rope?.particles[selectedIndex]}
+        <div>🟥 Selected: {selectedIndex}</div>
+        <div>🟨 Locked: {rope.particles.filter(p => p.locked).length}</div>
+        <div>🟩 Unlocked: {rope.particles.filter(p => !p.locked).length}</div>
       {/if}
+    </div>
+    <button class:active={pressedKeys['o']} on:click={() => zoom("out")}>
+      <div>Zoom Out (O)</div>
     </button>
   </div>
 </div>
