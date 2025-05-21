@@ -3,7 +3,7 @@
   import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, MeshBuilder, Mesh, Viewport } from '@babylonjs/core';
   import { RopeSimulator } from './RopeSimulator';
 
-  const moveSpeed = 0.08; // 이동 속도
+  const moveSpeed = 0.1; // 이동 속도
   const rotationSpeed = 0.05; // 회전 속도
   const zoomSpeed = 1.05;
   const pressedKeys = {
@@ -21,9 +21,7 @@
     'j': false,
     'r': false
   }
-  const unPressedKeys = {
-    'r': false,
-  }
+  const unPressedKeys = { 'r': true }
 
   const originPosition = Vector3.Zero();
 
@@ -37,7 +35,7 @@
 
   // to do view locked particle list on screen
 
-  const endIndex = 499;
+  const endIndex = 999;
   let selectedIndex = endIndex;
 
   function updateCamPosition() {
@@ -117,6 +115,7 @@
   const renderScene = () => {
     engine.runRenderLoop(() => {
       scene.render();
+      updateCamPosition();
       controlFunction();
     });
   };
@@ -140,7 +139,7 @@
     new HemisphericLight("light", new Vector3(0, 1, 0), scene);
     const count = endIndex + 1;
     
-    rope = new RopeSimulator(scene, new Vector3(0, 5, 0), 10 / count, count, []);
+    rope = new RopeSimulator(scene, new Vector3(0, count / 400, 0), 10 / count, count, []);
     flyCam = new ArcRotateCamera("camera", Math.PI / 2, Math.PI / 4, 12, originPosition, scene);
     const selectedParticleMesh = rope.particles[selectedIndex].mesh;
     flyCam.setTarget(new Vector3(selectedParticleMesh.position.x, selectedParticleMesh.position.y, selectedParticleMesh.position.z));
@@ -187,7 +186,6 @@
       const pickedMesh = pickResult.pickedMesh;
       if (!pickedMesh) return;
       selectedIndex = rope.particles.findIndex(p => p.mesh === pickedMesh);
-      updateCamPosition();
     };
 
     renderScene();
